@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>Pathloss App</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+        <!-- Metro UI -->
+        <link rel="stylesheet" href="https://cdn.metroui.org.ua/v4.3.2/css/metro-all.min.css">
+
+        <!-- World Wind -->
+        <script src="https://files.worldwind.arc.nasa.gov/artifactory/web/0.9.0/worldwind.min.js"></script>
+
+        <!-- Metro UI Javascript -->
+        <script src="https://cdn.metroui.org.ua/v4.3.2/js/metro.min.js"></script>
+    </head>
+    <body>
+        <div class="container-fluid">
+            <div class="display3" style="text-align:center">Pathloss App</div>
+        </div>
+        <div class="container-fluid">
+            <div class="row">
+                <div class="cell-md-8">
+                    <canvas id="canvasMap" style="width: 100%; height: 90%; background-color: black;"></canvas>
+                </div>
+                <div class="cell-md-4">
+                    <div class="row">
+                        <div class="cell">
+                            <div class="card">
+                                <div class="card-header clear">
+                                    Antena Transmisora
+                                </div>
+                                <div class="card-content p-3">
+                                    <input id="txLatitud" value="3.37" type="text" data-role="materialinput" data-label="Latitud" placeholder="Ingrese la latitud" onchange="updateTX();">
+                                    <input id="txLongitud" value="-76.529" type="text" data-role="materialinput" data-label="Longitud" placeholder="Ingrese la longitud" onchange="updateTX();">
+                                    <input id="htx" value="5" type="text" data-role="materialinput" data-label="Altura" placeholder="Ingrese la altura" onchange="updateLoss();">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="cell">
+                            <div class="card">
+                                <div class="card-header clear">
+                                    Antena Receptora
+                                </div>
+                                <div class="card-content p-3">
+                                    <input id="rxLatitud" value="3.375" type="text" data-role="materialinput" data-label="Latitud" placeholder="Ingrese la latitud" onchange="updateRX();">
+                                    <input id="rxLongitud" value="-76.535" type="text" data-role="materialinput" data-label="Longitud" placeholder="Ingrese la longitud" onchange="updateRX();">
+                                    <input id="hrx" value="1.5" type="text" data-role="materialinput" data-label="Altura" placeholder="Ingrese la altura" onchange="updateLoss();">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="cell">
+                            <div class="card">
+                                <div class="card-header">
+                                    Free Space Pathloss
+                                </div>
+                                <div class="card-content p-3">
+                                    <input id="frecuencia" value="900000000" type="text" data-role="materialinput" data-label="Frecuencia [Hz]" placeholder="Ingrese la frecuencia" onchange="updateLoss();">
+                                    <input id="distancia" type="text" data-role="input" data-prepend="Distancia: " data-append="m" disabled>
+                                    <input id="fspl" type="text" data-role="input" data-prepend="FSPL: " data-append="dB" disabled>
+                                    <input id="dosrayos" type="text" data-role="input" data-prepend="Dos rayos: " data-append="dB" disabled>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script>
+            var wwd = new WorldWind.WorldWindow("canvasMap");
+
+            wwd.addLayer(new WorldWind.BMNGLandsatLayer());
+            wwd.addLayer(new WorldWind.BingAerialLayer(null));
+            //wwd.addLayer(new WorldWind.BingAerialWithLabelsLayer(null));
+
+            wwd.addLayer(new WorldWind.CompassLayer());
+            wwd.addLayer(new WorldWind.CoordinatesDisplayLayer(wwd));
+            wwd.addLayer(new WorldWind.ViewControlsLayer(wwd));
+
+            var placemarkLayer = new WorldWind.RenderableLayer();
+            wwd.addLayer(placemarkLayer);
+
+            var tx = new WorldWind.Position(parseFloat(document.getElementById("txLatitud").value), parseFloat(document.getElementById("txLongitud").value), 0);
+            var rx = new WorldWind.Position(parseFloat(document.getElementById("rxLatitud").value), parseFloat(document.getElementById("rxLongitud").value), 0);
+
+            var attributes = new WorldWind.PlacemarkAttributes(null);
+            attributes.imageScale = 5;
+            attributes.imageColor = WorldWind.Color.RED;
+
+            var placemarkTx = new WorldWind.Placemark(tx, false, attributes);
+            placemarkTx.label = "Tx\n" +
+                "Lat " + tx.latitude.toPrecision(4).toString() + "\n" +
+                "Lon " + tx.longitude.toPrecision(5).toString();
+            placemarkTx.alwaysOnTop = true;
+            placemarkTx.altitudeMode = WorldWind.CLAMP_TO_GROUND;
+
+            placemarkLayer.addRenderable(placemarkTx);
+
+            var placemarkRx = new WorldWind.Placemark(rx, false, attributes);
+            placemarkRx.label = "Rx\n" +
+                "Lat " + rx.latitude.toPrecision(4).toString() + "\n" +
+                "Lon " + rx.longitude.toPrecision(5).toString();
+            placemarkRx.alwaysOnTop = true;
+            placemarkRx.altitudeMode = WorldWind.CLAMP_TO_GROUND;
+
+            placemarkLayer.addRenderable(placemarkRx);
+
+            var lengthMeasurer = new WorldWind.LengthMeasurer(wwd);
+            var distance = lengthMeasurer.getLength([tx, rx], false, WorldWind.GREAT_CIRCLE);
+
+            document.getElementById("distancia").value = distance;
+
+            /*var fspl = {
+                frequency: parseFloat(document.getElementById("frecuencia").value),
+                getLoss: function(distance) {
+                    return 10*Math.log10(Math.pow((4*Math.PI*this.frequency*distance)/3e8,2));
+                    //return 92.4 + 20*Math.log10(this.frequency/1000000000) + 20*Math.log10(distance/1000);
+                }
+            };
+            
+            document.getElementById("perdidas").value = fspl.getLoss(distance);*/
+          
+            document.getElementById("fspl").value = freeSpacePathloss();
+            document.getElementById("dosrayos").value = twoRay();
+
+            wwd.goTo(new WorldWind.Position(tx.latitude, tx.longitude, 5000), null);
+            
+            function updateTX() {
+                tx.latitude = parseFloat(document.getElementById("txLatitud").value);
+                tx.longitude = parseFloat(document.getElementById("txLongitud").value)
+                placemarkTx.label = "Tx\n" +
+                    "Lat " + tx.latitude.toPrecision(4).toString() + "\n" +
+                    "Lon " + tx.longitude.toPrecision(5).toString();
+                distance = lengthMeasurer.getLength([tx, rx], false, WorldWind.GREAT_CIRCLE);
+                document.getElementById("distancia").value = distance;
+                //document.getElementById("fspl").value = fspl.getLoss(distance);
+                document.getElementById("fspl").value = freeSpacePathloss();
+            		document.getElementById("dosrayos").value = twoRay();
+            }
+            
+            function updateRX() {
+                rx.latitude = parseFloat(document.getElementById("rxLatitud").value);
+                rx.longitude = parseFloat(document.getElementById("rxLongitud").value)
+                placemarkRx.label = "Rx\n" +
+                    "Lat " + rx.latitude.toPrecision(4).toString() + "\n" +
+                    "Lon " + rx.longitude.toPrecision(5).toString();
+                distance = lengthMeasurer.getLength([tx, rx], false, WorldWind.GREAT_CIRCLE);
+                document.getElementById("distancia").value = distance;
+                //document.getElementById("fspl").value = fspl.getLoss(distance);
+                document.getElementById("fspl").value = freeSpacePathloss();
+            		document.getElementById("dosrayos").value = twoRay();
+            }
+
+            /*function updateFreq() {
+                fspl.frequency = parseFloat(document.getElementById("frecuencia").value);
+                document.getElementById("perdidas").value = fspl.getLoss(distance);
+            }*/
+          
+          function updateLoss() {
+            document.getElementById("fspl").value = freeSpacePathloss();
+            document.getElementById("dosrayos").value = twoRay();
+          }
+          
+          function freeSpacePathloss() {
+            var frequency = parseFloat(document.getElementById("frecuencia").value);
+            return 10*Math.log10(Math.pow((4*Math.PI*frequency*distance)/3e8,2));
+          }
+          
+          function twoRay() {
+            var lambda = 3e8/parseFloat(document.getElementById("frecuencia").value);
+            var htx = parseFloat(document.getElementById("htx").value);
+            var hrx = parseFloat(document.getElementById("hrx").value);
+            
+            return 10*Math.log10(1/(4*Math.pow(lambda/(4*Math.PI*distance),2)*Math.pow((2*Math.PI*htx*hrx)/(lambda*distance),2)));
+          }
+        </script>
+    </body>
+</html>
